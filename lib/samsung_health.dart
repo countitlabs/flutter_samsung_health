@@ -1,38 +1,48 @@
 library samsung_health;
 
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 
 /// Typed API for Samsung Health Data SDK integration.
 ///
 /// All MethodChannel access and raw Map serialization is encapsulated here.
-/// The host app only depends on this typed interface — never touches the
-/// channel, method names, or raw maps directly.
+/// The host app depends on this typed interface — not on the channel, method
+/// names, or raw maps.
+///
+/// ## Testing
+///
+/// Inject a mock [MethodChannel] via the constructor to avoid real native calls:
+///
+/// ```dart
+/// final mockChannel = MockMethodChannel();
+/// final factory = SamsungHealthFactory(channel: mockChannel);
+/// ```
 class SamsungHealthFactory {
-  static const _channel = MethodChannel('com.countit.app/samsung_health');
+  final MethodChannel _channel;
 
-  static Future<bool> isAvailable() async {
+  SamsungHealthFactory({MethodChannel? channel})
+      : _channel = channel ?? const MethodChannel('com.countit.app/samsung_health');
+
+  Future<bool> isAvailable() async {
     final result = await _channel.invokeMethod<bool>('isAvailable');
     return result ?? false;
   }
 
-  static Future<bool> isConnected() async {
+  Future<bool> isConnected() async {
     final result = await _channel.invokeMethod<bool>('isConnected');
     return result ?? false;
   }
 
-  static Future<bool> requestPermissions() async {
+  Future<bool> requestPermissions() async {
     final result = await _channel.invokeMethod<bool>('requestPermissions');
     return result ?? false;
   }
 
-  static Future<bool> disconnect() async {
+  Future<bool> disconnect() async {
     final result = await _channel.invokeMethod<bool>('disconnect');
     return result ?? false;
   }
 
-  static Future<int?> getSteps({
+  Future<int?> getSteps({
     required DateTime start,
     required DateTime end,
   }) async {
@@ -43,7 +53,7 @@ class SamsungHealthFactory {
     return result?['total'] as int?;
   }
 
-  static Future<List<Map<String, dynamic>>?> getDailySteps({
+  Future<List<DailySteps>?> getDailySteps({
     required DateTime start,
     required DateTime end,
   }) async {
@@ -52,10 +62,10 @@ class SamsungHealthFactory {
       'endTime': end.millisecondsSinceEpoch,
     });
     if (result == null) return null;
-    return result.map((e) => Map<String, dynamic>.from(e)).toList();
+    return result.map((e) => DailySteps.fromMap(e as Map)).toList();
   }
 
-  static Future<List<SamsungActivity>?> getActivities({
+  Future<List<SamsungActivity>?> getActivities({
     required DateTime start,
     required DateTime end,
   }) async {
@@ -65,6 +75,20 @@ class SamsungHealthFactory {
     });
     if (result == null) return null;
     return result.map((e) => SamsungActivity.fromMap(e as Map)).toList();
+  }
+}
+
+class DailySteps {
+  final DateTime date;
+  final int steps;
+
+  const DailySteps({required this.date, required this.steps});
+
+  factory DailySteps.fromMap(Map map) {
+    return DailySteps(
+      date: DateTime.fromMillisecondsSinceEpoch((map['date'] as num).toInt()),
+      steps: (map['steps'] as num).toInt(),
+    );
   }
 }
 
