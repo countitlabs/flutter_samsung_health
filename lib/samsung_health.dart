@@ -52,7 +52,7 @@ class SamsungHealthFactory {
       'endTime': end.millisecondsSinceEpoch,
     });
     if (result == null) return null;
-    return result.cast<Map<String, dynamic>>();
+    return result.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   static Future<List<SamsungActivity>?> getActivities({
