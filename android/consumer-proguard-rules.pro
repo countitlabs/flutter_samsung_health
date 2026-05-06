@@ -1,0 +1,2 @@
+-keep class com.samsung.android.** { *; }
+-dontwarn com.samsung.android.**
