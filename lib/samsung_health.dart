@@ -92,6 +92,9 @@ class DailySteps {
   }
 }
 
+/// Represents a single activity session
+///
+/// [duration] is in seconds
 class SamsungActivity {
   final DateTime startTime;
   final DateTime endTime;
@@ -137,6 +140,8 @@ class SamsungMeasurement {
   final double value;
 
   const SamsungMeasurement({required this.unit, required this.value});
+
+  bool get isSeconds => unit == 'seconds';
 
   factory SamsungMeasurement.fromMap(Map map) {
     return SamsungMeasurement(

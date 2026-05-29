@@ -658,6 +658,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                     Log.w("SamsungHealth", "Failed to get steps for exercise $index session $sessionIndex: ${e.message}")
                                 }
 
+                                measurements.add(mapOf("unit" to "second", "value" to session.duration.toMillis() / 1000.0))
                                 activities.add(mapOf(
                                     "startTime" to session.startTime.toEpochMilli(),
                                     "endTime" to session.endTime.toEpochMilli(),
