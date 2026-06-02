@@ -141,7 +141,7 @@ class SamsungMeasurement {
 
   const SamsungMeasurement({required this.unit, required this.value});
 
-  bool get isSeconds => unit == 'seconds';
+  bool get isSeconds => unit == 'second';
 
   factory SamsungMeasurement.fromMap(Map map) {
     return SamsungMeasurement(
