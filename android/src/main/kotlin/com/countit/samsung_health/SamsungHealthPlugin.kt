@@ -641,6 +641,18 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                     measurements.add(mapOf("unit" to "kilocalorie", "value" to session.calories.toDouble()))
                                 }
 
+                                session.altitudeGain?.let { altitudeGain ->
+                                    if (altitudeGain > 0f) {
+                                        measurements.add(mapOf("unit" to "meter", "value" to altitudeGain.toDouble()))
+                                    }
+                                }
+
+                                session.meanSpeed?.let { meanSpeed ->
+                                    if (meanSpeed > 0f) {
+                                        measurements.add(mapOf("unit" to "meter_per_second", "value" to meanSpeed.toDouble()))
+                                    }
+                                }
+
                                 // Sub-query: steps during this specific workout interval
                                 try {
                                     val stepsRequest = DataType.StepsType.TOTAL.requestBuilder
