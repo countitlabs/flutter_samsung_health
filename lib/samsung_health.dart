@@ -20,7 +20,8 @@ class SamsungHealthFactory {
   final MethodChannel _channel;
 
   SamsungHealthFactory({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel('com.countit.app/samsung_health');
+    : _channel =
+          channel ?? const MethodChannel('com.countit.app/samsung_health');
 
   Future<bool> isAvailable() async {
     final result = await _channel.invokeMethod<bool>('isAvailable');
@@ -138,8 +139,13 @@ class SamsungActivity {
 class SamsungMeasurement {
   final String unit;
   final double value;
+  final String? type;
 
-  const SamsungMeasurement({required this.unit, required this.value});
+  const SamsungMeasurement({
+    required this.unit,
+    required this.value,
+    this.type,
+  });
 
   bool get isSeconds => unit == 'second';
 
@@ -147,6 +153,7 @@ class SamsungMeasurement {
     return SamsungMeasurement(
       unit: map['unit'] as String,
       value: (map['value'] as num).toDouble(),
+      type: map['type'] as String?,
     );
   }
 }

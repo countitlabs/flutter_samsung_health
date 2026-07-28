@@ -642,14 +642,32 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                 }
 
                                 session.altitudeGain?.let { altitudeGain ->
-                                    if (altitudeGain > 0f) {
-                                        measurements.add(mapOf("unit" to "meter", "value" to altitudeGain.toDouble()))
+                                    if (altitudeGain.isFinite()) {
+                                        measurements.add(mapOf("type" to "elevation_gain", "unit" to "meter", "value" to altitudeGain.toDouble()))
+                                    }
+                                }
+
+                                session.altitudeLoss?.let { altitudeLoss ->
+                                    if (altitudeLoss.isFinite()) {
+                                        measurements.add(mapOf("type" to "elevation_loss", "unit" to "meter", "value" to altitudeLoss.toDouble()))
+                                    }
+                                }
+
+                                session.minAltitude?.let { minAltitude ->
+                                    if (minAltitude.isFinite()) {
+                                        measurements.add(mapOf("type" to "min_altitude", "unit" to "meter", "value" to minAltitude.toDouble()))
+                                    }
+                                }
+
+                                session.maxAltitude?.let { maxAltitude ->
+                                    if (maxAltitude.isFinite()) {
+                                        measurements.add(mapOf("type" to "max_altitude", "unit" to "meter", "value" to maxAltitude.toDouble()))
                                     }
                                 }
 
                                 session.meanSpeed?.let { meanSpeed ->
-                                    if (meanSpeed > 0f) {
-                                        measurements.add(mapOf("unit" to "meter_per_second", "value" to meanSpeed.toDouble()))
+                                    if (meanSpeed.isFinite() && meanSpeed >= 0f) {
+                                        measurements.add(mapOf("type" to "average_speed", "unit" to "meter_per_second", "value" to meanSpeed.toDouble()))
                                     }
                                 }
 
