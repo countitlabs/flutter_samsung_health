@@ -107,6 +107,10 @@ class SamsungActivity {
   final String? sourceName;
   final List<SamsungMeasurement> measurements;
 
+  /// GPS route points recorded during a `workout`. Null when EXERCISE_LOCATION
+  /// wasn't granted or the workout has no route (e.g. indoor/strength training).
+  final List<SamsungRoutePoint>? points;
+
   const SamsungActivity({
     required this.startTime,
     required this.endTime,
@@ -117,6 +121,7 @@ class SamsungActivity {
     this.deviceName,
     this.sourceName,
     required this.measurements,
+    this.points,
   });
 
   factory SamsungActivity.fromMap(Map map) {
@@ -132,6 +137,32 @@ class SamsungActivity {
       measurements: (map['measurements'] as List)
           .map((m) => SamsungMeasurement.fromMap(m as Map))
           .toList(),
+      points: (map['points'] as List?)
+          ?.map((p) => SamsungRoutePoint.fromMap(p as Map))
+          .toList(),
+    );
+  }
+}
+
+class SamsungRoutePoint {
+  final double latitude;
+  final double longitude;
+  final DateTime timestamp;
+  final double? altitude;
+
+  const SamsungRoutePoint({
+    required this.latitude,
+    required this.longitude,
+    required this.timestamp,
+    this.altitude,
+  });
+
+  factory SamsungRoutePoint.fromMap(Map map) {
+    return SamsungRoutePoint(
+      latitude: (map['latitude'] as num).toDouble(),
+      longitude: (map['longitude'] as num).toDouble(),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(map['timestamp'] as int),
+      altitude: (map['altitude'] as num?)?.toDouble(),
     );
   }
 }

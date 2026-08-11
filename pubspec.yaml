@@ -1,6 +1,6 @@
 name: samsung_health
 description: Local Flutter plugin wrapping Samsung Health Data SDK for the Journey app.
-version: 0.0.1
+version: 0.1.0
 publish_to: "none"
 
 environment:

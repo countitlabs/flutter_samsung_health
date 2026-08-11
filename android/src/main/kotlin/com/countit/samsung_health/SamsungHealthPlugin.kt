@@ -63,6 +63,11 @@ import java.time.ZoneId
  * - `DataTypes.STEPS` (read) — total steps + step sessions
  * - `DataTypes.EXERCISE` (read) — workout activities
  * - `DataTypes.ACTIVITY_SUMMARY` (read) — daily distance
+ *
+ * ## Permissions Optional
+ * - `DataTypes.EXERCISE_LOCATION` (read) — GPS route points for workouts. Requested alongside
+ *   the required permissions but not required for `isConnected`/`requestPermissions` to succeed;
+ *   declining it only omits `points` from `workout` entries.
  */
 class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var channel: MethodChannel
@@ -91,6 +96,14 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         Permission.of(DataTypes.STEPS, AccessType.READ),
         Permission.of(DataTypes.EXERCISE, AccessType.READ),
         Permission.of(DataTypes.ACTIVITY_SUMMARY, AccessType.READ),
+    )
+
+    /**
+     * Optional permissions, requested alongside the required ones but not gating
+     * `allGranted` — declining these should not break steps/distance/workout sync.
+     */
+    private val optionalPermissions = setOf(
+        Permission.of(DataTypes.EXERCISE_LOCATION, AccessType.READ),
     )
 
     // MARK: - FlutterPlugin Lifecycle
@@ -184,7 +197,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
         scope.launch {
             try {
-                val granted = store.requestPermissions(requiredPermissions, activity)
+                val granted = store.requestPermissions(requiredPermissions + optionalPermissions, activity)
                 val allGranted = granted.containsAll(requiredPermissions)
                 if (allGranted) {
                     // Only clear the disconnect flag on full grant — denial does not imply reconnection.
@@ -382,7 +395,9 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
      * 1. **steps** (`type: "steps"`) — Daily total steps, one entry per day
      * 2. **distance_delta** (`type: "distance_delta"`) — Daily distance in meters
      * 3. **step_session** (`type: "step_session"`) — Hourly step buckets (non-overlapping)
-     * 4. **workout** (`type: "workout"`) — Exercise sessions with distance, calories, and steps
+     * 4. **workout** (`type: "workout"`) — Exercise sessions with distance, calories, steps, and
+     *    an optional `points` list (GPS route, present only when EXERCISE_LOCATION was granted
+     *    and the workout was tracked with GPS)
      *
      * ## Important Notes
      * - **Step sessions**: The Samsung SDK's `setLocalTimeFilterWithGroup(HOURLY, 1)` produces
@@ -689,6 +704,18 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                 }
 
                                 measurements.add(mapOf("unit" to "second", "value" to session.duration.toMillis() / 1000.0))
+
+                                // Route points are only present when EXERCISE_LOCATION was granted and the
+                                // workout was tracked with GPS (e.g. absent for indoor/strength workouts).
+                                val points = session.route?.map { location ->
+                                    mapOf(
+                                        "latitude" to location.latitude.toDouble(),
+                                        "longitude" to location.longitude.toDouble(),
+                                        "altitude" to location.altitude?.toDouble(),
+                                        "timestamp" to location.timestamp.toEpochMilli()
+                                    )
+                                }?.takeIf { it.isNotEmpty() }
+
                                 activities.add(mapOf(
                                     "startTime" to session.startTime.toEpochMilli(),
                                     "endTime" to session.endTime.toEpochMilli(),
@@ -698,7 +725,8 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                     "source" to workoutSource,
                                     "deviceName" to workoutDeviceName,
                                     "sourceName" to workoutSourceName,
-                                    "measurements" to measurements
+                                    "measurements" to measurements,
+                                    "points" to points
                                 ))
                             } catch (e: Exception) {
                                 Log.d("SamsungHealth", "Error processing exercise $index session $sessionIndex: ${e.message}")

@@ -22,7 +22,7 @@ dependencies:
   samsung_health:
     git:
       url: https://github.com/countitlabs/flutter_samsung_health.git
-      ref: feat-samsung-health-sdk-integration
+      ref: feat-exercise-location
 ```
 
 ## MethodChannel Contract
@@ -35,7 +35,7 @@ dependencies:
 | `disconnect` | `Boolean` | Marks tracker as disconnected (SharedPreferences flag) |
 | `getSteps` | `Map(total: Long)` | Total steps in interval |
 | `getDailySteps` | `List<Map(date, steps)>` | Daily step counts |
-| `getActivities` | `List<Map>` | Steps, distance, step sessions, workouts |
+| `getActivities` | `List<Map>` | Steps, distance, step sessions, workouts (with optional GPS route `points`) |
 
 Channel name: `com.countit.app/samsung_health`
 
@@ -51,3 +51,6 @@ The plugin requests read access for:
 - Steps
 - Exercise (workouts)
 - Activity Summary (daily distance)
+
+It also requests, as optional (declining does not affect the above):
+- Exercise Location — GPS route points for workouts, exposed as `points` on `workout` entries in `getActivities`
