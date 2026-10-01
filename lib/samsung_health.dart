@@ -77,6 +77,115 @@ class SamsungHealthFactory {
     if (result == null) return null;
     return result.map((e) => SamsungActivity.fromMap(e as Map)).toList();
   }
+
+  /// Sub-step failures of the last completed [getActivities] call, including
+  /// one that ended in `GET_ACTIVITIES_FAIL`. Null if none has completed yet.
+  Future<SamsungActivitiesDiagnostics?> getLastActivitiesDiagnostics() async {
+    final result = await _channel.invokeMethod<Map>(
+      'getLastActivitiesDiagnostics',
+    );
+    if (result == null) return null;
+    return SamsungActivitiesDiagnostics.fromMap(result);
+  }
+}
+
+/// What the Samsung Health SDK reported about a failure. Sent as the
+/// `details` of every exception-based [PlatformException] from this plugin.
+class SamsungHealthError {
+  /// Exception class name, e.g. `ResolvablePlatformException`.
+  final String? exception;
+
+  /// Samsung SDK error code, e.g. 2003.
+  final int? errorCode;
+
+  /// Samsung SDK `ErrorCode` constant name, e.g. `ERR_ACCESS_CONTROL`.
+  final String? errorName;
+
+  /// Whether the user can resolve it, e.g. by updating Samsung Health.
+  final bool? hasResolution;
+
+  final String? message;
+
+  const SamsungHealthError({
+    this.exception,
+    this.errorCode,
+    this.errorName,
+    this.hasResolution,
+    this.message,
+  });
+
+  factory SamsungHealthError.fromMap(Map map) {
+    return SamsungHealthError(
+      exception: map['exception'] as String?,
+      errorCode: (map['errorCode'] as num?)?.toInt(),
+      errorName: map['errorName'] as String?,
+      hasResolution: map['hasResolution'] as bool?,
+      message: map['message'] as String?,
+    );
+  }
+
+  /// Reads the details of a [PlatformException] thrown by this plugin.
+  static SamsungHealthError? fromPlatformException(PlatformException e) {
+    final details = e.details;
+    return details is Map ? SamsungHealthError.fromMap(details) : null;
+  }
+}
+
+/// A best-effort step of [SamsungHealthFactory.getActivities] that failed and
+/// was skipped, so its data is missing from the result.
+class SamsungActivitiesFailure {
+  /// `devices`, `daily_steps`, `daily_distance`, `hourly_steps`,
+  /// `step_sessions`, `workout_device`, `workout_steps`, `workout_session`,
+  /// `exercise`, or `activities` when the whole call failed.
+  final String step;
+
+  /// Start of the day, hour or workout it covered, when it covered one.
+  final DateTime? start;
+
+  final SamsungHealthError error;
+
+  const SamsungActivitiesFailure({
+    required this.step,
+    required this.error,
+    this.start,
+  });
+
+  factory SamsungActivitiesFailure.fromMap(Map map) {
+    final start = map['start'] as num?;
+    return SamsungActivitiesFailure(
+      step: map['step'] as String,
+      start: start == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(start.toInt()),
+      error: SamsungHealthError.fromMap(map),
+    );
+  }
+}
+
+class SamsungActivitiesDiagnostics {
+  final List<SamsungActivitiesFailure> failures;
+
+  /// Workout sessions the SDK returned, before any was dropped.
+  final int workoutSessionsRead;
+
+  /// Workouts that made it into the result.
+  final int workoutsReturned;
+
+  const SamsungActivitiesDiagnostics({
+    required this.failures,
+    required this.workoutSessionsRead,
+    required this.workoutsReturned,
+  });
+
+  factory SamsungActivitiesDiagnostics.fromMap(Map map) {
+    return SamsungActivitiesDiagnostics(
+      failures: ((map['failures'] as List?) ?? const [])
+          .map((e) => SamsungActivitiesFailure.fromMap(e as Map))
+          .toList(),
+      workoutSessionsRead: (map['workoutSessionsRead'] as num?)?.toInt() ?? 0,
+      workoutsReturned: (map['workoutsReturned'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 class DailySteps {

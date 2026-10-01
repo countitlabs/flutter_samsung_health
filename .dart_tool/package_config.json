@@ -39,13 +39,13 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///C:/Users/LGM/fvm/versions/3.41.3/packages/flutter",
+      "rootUri": "file:///D:/codigo/repo/2026/Dixtra/journey/.fvm/flutter_sdk/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.9"
     },
     {
       "name": "flutter_test",
-      "rootUri": "file:///C:/Users/LGM/fvm/versions/3.41.3/packages/flutter_test",
+      "rootUri": "file:///D:/codigo/repo/2026/Dixtra/journey/.fvm/flutter_sdk/packages/flutter_test",
       "packageUri": "lib/",
       "languageVersion": "3.9"
     },
@@ -93,7 +93,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///C:/Users/LGM/fvm/versions/3.41.3/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///D:/codigo/repo/2026/Dixtra/journey/.fvm/flutter_sdk/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.9"
     },
@@ -154,7 +154,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.11.1",
-  "flutterRoot": "file:///C:/Users/LGM/fvm/versions/3.41.3",
+  "flutterRoot": "file:///D:/codigo/repo/2026/Dixtra/journey/.fvm/flutter_sdk",
   "flutterVersion": "3.41.3",
   "pubCache": "file:///C:/Users/LGM/AppData/Local/Pub/Cache"
 }

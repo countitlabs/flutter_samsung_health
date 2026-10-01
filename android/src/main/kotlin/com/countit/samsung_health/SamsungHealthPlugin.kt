@@ -9,6 +9,9 @@ import com.samsung.android.sdk.health.data.HealthDataService
 import com.samsung.android.sdk.health.data.HealthDataStore
 import com.samsung.android.sdk.health.data.data.entries.ExerciseSession
 import com.samsung.android.sdk.health.data.device.DeviceGroup
+import com.samsung.android.sdk.health.data.error.ErrorCode
+import com.samsung.android.sdk.health.data.error.HealthDataException
+import com.samsung.android.sdk.health.data.error.ResolvablePlatformException
 import com.samsung.android.sdk.health.data.request.DataTypes
 import com.samsung.android.sdk.health.data.request.DataType
 import com.samsung.android.sdk.health.data.request.LocalTimeFilter
@@ -32,6 +35,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import java.lang.reflect.Modifier
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -58,6 +62,12 @@ import java.time.ZoneId
  * | `getSteps` | `Map(total: Long)` | Total steps in interval |
  * | `getDailySteps` | `List<Map(date, steps)>` | Daily step counts |
  * | `getActivities` | `List<Map>` | Steps, distance, step sessions, workouts |
+ * | `getLastActivitiesDiagnostics` | `Map?` | Sub-step failures of the last completed `getActivities` |
+ *
+ * ## Errors
+ * Every `result.error` caused by an exception carries `errorDetails(e)` as `details`: the Samsung
+ * SDK `errorCode` and its `ErrorCode` constant name, the exception class, and `hasResolution`
+ * (the user can fix it, e.g. by updating Samsung Health).
  *
  * ## Permissions Required
  * - `DataTypes.STEPS` (read) — total steps + step sessions
@@ -78,10 +88,39 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var prefs: SharedPreferences
     private var activeGetActivitiesJob: Job? = null
+    @Volatile private var lastActivitiesDiagnostics: Map<String, Any?>? = null
 
     companion object {
         private const val PREFS_NAME = "samsung_health_prefs"
         private const val KEY_DISCONNECTED = "intentionally_disconnected"
+        private const val MESSAGE_MAX_LENGTH = 200
+
+        /** `ErrorCode` constant names by value, e.g. 2003 → ERR_ACCESS_CONTROL. */
+        private val errorCodeNames: Map<Int, String> by lazy {
+            try {
+                ErrorCode::class.java.declaredFields
+                    .filter { Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType }
+                    .associate { field ->
+                        field.isAccessible = true
+                        field.getInt(null) to field.name
+                    }
+            } catch (e: Exception) {
+                emptyMap()
+            }
+        }
+
+        /** Describes [e] for Flutter, keeping what the Samsung SDK exposes beyond the message. */
+        fun errorDetails(e: Throwable): Map<String, Any?> {
+            val healthException = e as? HealthDataException
+            val errorCode = healthException?.errorCode
+            return mapOf(
+                "exception" to e.javaClass.simpleName,
+                "errorCode" to errorCode,
+                "errorName" to errorCode?.let { errorCodeNames[it] },
+                "hasResolution" to (e as? ResolvablePlatformException)?.hasResolution,
+                "message" to (healthException?.errorMessage ?: e.message)?.take(MESSAGE_MAX_LENGTH),
+            )
+        }
 
         /** Device types to prioritize for primary device resolution (wearables over phone). */
         private val WEARABLE_DEVICE_TYPES = setOf(
@@ -157,6 +196,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             "getSteps" -> handleGetSteps(call, result)
             "getDailySteps" -> handleGetDailySteps(call, result)
             "getActivities" -> handleGetActivities(call, result)
+            "getLastActivitiesDiagnostics" -> result.success(lastActivitiesDiagnostics)
             else -> result.notImplemented()
         }
     }
@@ -210,7 +250,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             } catch (e: Exception) {
                 Log.d("SamsungHealth", "requestPermissions error: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    result.error("PERMISSION_ERROR", e.message, null)
+                    result.error("PERMISSION_ERROR", e.message, errorDetails(e))
                 }
             }
         }
@@ -242,7 +282,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             } catch (e: Exception) {
                 Log.d("SamsungHealth", "isConnected error: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    result.error("CONNECTION_ERROR", e.message, null)
+                    result.error("CONNECTION_ERROR", e.message, errorDetails(e))
                 }
             }
         }
@@ -261,7 +301,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             result.success(true)
         } catch (e: Exception) {
             Log.d("SamsungHealth", "disconnect error: ${e.message}")
-            result.error("DISCONNECT_ERROR", e.message, null)
+            result.error("DISCONNECT_ERROR", e.message, errorDetails(e))
         }
     }
 
@@ -312,7 +352,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             } catch (e: Exception) {
                 Log.d("SamsungHealth", "getSteps error: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    result.error("GET_STEPS_FAIL", e.message, null)
+                    result.error("GET_STEPS_FAIL", e.message, errorDetails(e))
                 }
             }
         }
@@ -382,7 +422,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             } catch (e: Exception) {
                 Log.d("SamsungHealth", "getDailySteps error: ${e.message}")
                 withContext(Dispatchers.Main) {
-                    result.error("GET_DAILY_STEPS_FAIL", e.message, null)
+                    result.error("GET_DAILY_STEPS_FAIL", e.message, errorDetails(e))
                 }
             }
         }
@@ -434,6 +474,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
 
         activeGetActivitiesJob = scope.launch {
+            val diagnostics = ActivitiesDiagnostics()
             try {
                 val localTimeFilter = LocalTimeFilter.of(
                     Instant.ofEpochMilli(startTime).atZone(ZoneId.systemDefault()).toLocalDateTime(),
@@ -473,6 +514,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                     primaryDeviceName = primaryDevice?.name
                 } catch (e: Exception) {
                     Log.w("SamsungHealth", "Could not resolve devices: ${e.message}")
+                    diagnostics.record("devices", e)
                 }
 
                 // Daily total steps — aggregateData only (SDK limitation: no source metadata for STEPS)
@@ -502,6 +544,11 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         }
                     } catch (e: Exception) {
                         Log.w("SamsungHealth", "getActivities: daily steps error for $currentStepsDate: ${e.message}")
+                        diagnostics.record(
+                            "daily_steps",
+                            e,
+                            currentStepsDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        )
                     }
                     currentStepsDate = currentStepsDate.plusDays(1)
                 }
@@ -536,6 +583,11 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                         }
                     } catch (e: Exception) {
                         Log.w("SamsungHealth", "getDailyDistance error for $currentLocalDate: ${e.message}")
+                        diagnostics.record(
+                            "daily_distance",
+                            e,
+                            currentLocalDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                        )
                     }
                     currentLocalDate = currentLocalDate.plusDays(1)
                 }
@@ -592,6 +644,11 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                         }
                                     } catch (e: Exception) {
                                         Log.w("SamsungHealth", "getStepSessions error for hour ${pair.first}: ${e.message}")
+                                        diagnostics.record(
+                                            "hourly_steps",
+                                            e,
+                                            pair.first.atZone(zoneId).toInstant().toEpochMilli()
+                                        )
                                         null
                                     }
                                 }
@@ -606,6 +663,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                     }
                 } catch (e: Exception) {
                     Log.w("SamsungHealth", "getStepSessions error: ${e.message}")
+                    diagnostics.record("step_sessions", e)
                 }
 
                 // Workouts — ExerciseSession data with distance, calories, and steps
@@ -630,12 +688,15 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                 val device = store.getDeviceManager().getDevice(dataSource.deviceId)
                                 workoutDeviceName = device?.name
                                 if (device != null) deviceIdToName[device.id] = device.name
-                            } catch (_: Exception) { }
+                            } catch (e: Exception) {
+                                diagnostics.record("workout_device", e)
+                            }
                         }
                         if (workoutDeviceName == null && dataSource?.appId == primarySourceName) {
                             workoutDeviceName = primaryDeviceName
                         }
 
+                        diagnostics.workoutSessionsRead += sessions.size
                         for ((sessionIndex, session) in sessions.withIndex()) {
                             try {
                                 val activityType = session.exerciseType.name.lowercase()
@@ -701,6 +762,7 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                     }
                                 } catch (e: Exception) {
                                     Log.w("SamsungHealth", "Failed to get steps for exercise $index session $sessionIndex: ${e.message}")
+                                    diagnostics.record("workout_steps", e, session.startTime.toEpochMilli())
                                 }
 
                                 measurements.add(mapOf("unit" to "second", "value" to session.duration.toMillis() / 1000.0))
@@ -728,15 +790,19 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                                     "measurements" to measurements,
                                     "points" to points
                                 ))
+                                diagnostics.workoutsReturned++
                             } catch (e: Exception) {
                                 Log.d("SamsungHealth", "Error processing exercise $index session $sessionIndex: ${e.message}")
+                                diagnostics.record("workout_session", e, session.startTime.toEpochMilli())
                             }
                         }
                     } catch (e: Exception) {
                         Log.d("SamsungHealth", "Error reading exercise data point $index: ${e.message}")
+                        diagnostics.record("exercise", e)
                     }
                 }
 
+                lastActivitiesDiagnostics = diagnostics.toMap()
                 withContext(Dispatchers.Main) {
                     result.success(activities)
                 }
@@ -746,10 +812,36 @@ class SamsungHealthPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 throw e
             } catch (e: Exception) {
                 Log.d("SamsungHealth", "getActivities error: ${e.message}")
+                diagnostics.record("activities", e)
+                lastActivitiesDiagnostics = diagnostics.toMap()
                 withContext(Dispatchers.Main) {
-                    result.error("GET_ACTIVITIES_FAIL", e.message, null)
+                    result.error("GET_ACTIVITIES_FAIL", e.message, errorDetails(e))
                 }
             }
         }
     }
+}
+
+/**
+ * Sub-step failures of one `getActivities` call. Those steps are best-effort — logged and skipped
+ * so the rest of the data still syncs — so this is the only trace of what was lost.
+ * Hourly buckets record from parallel coroutines, hence the synchronization.
+ */
+private class ActivitiesDiagnostics {
+    private val failures = mutableListOf<Map<String, Any?>>()
+    var workoutSessionsRead = 0
+    var workoutsReturned = 0
+
+    /** [step] names the skipped work; [start] is the epoch ms of the day/hour/workout it covered. */
+    @Synchronized
+    fun record(step: String, e: Throwable, start: Long? = null) {
+        failures.add(SamsungHealthPlugin.errorDetails(e) + mapOf("step" to step, "start" to start))
+    }
+
+    @Synchronized
+    fun toMap(): Map<String, Any?> = mapOf(
+        "failures" to failures.toList(),
+        "workoutSessionsRead" to workoutSessionsRead,
+        "workoutsReturned" to workoutsReturned,
+    )
 }
